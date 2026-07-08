@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Decor Pikmin Tracker</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0e1a12">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pikmin Tracker">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;900&display=swap');
   :root {
@@ -701,6 +708,14 @@ function renderAll(){
 }
 
 renderAll();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch(err => {
+      console.log('Service worker registration failed:', err);
+    });
+  });
+}
 </script>
 </body>
 </html>
