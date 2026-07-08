@@ -141,7 +141,12 @@
 <header>
   <div style="display:flex;justify-content:space-between;align-items:flex-start">
     <div><h1>🌱 Decor Pikmin Tracker</h1><p>Tap a tag to cycle its status</p></div>
-    <button class="reset-btn" onclick="resetAll()">Reset All</button>
+    <div style="display:flex;gap:6px;">
+      <button class="reset-btn" onclick="exportData()">⬇ Backup</button>
+      <button class="reset-btn" onclick="document.getElementById('importFile').click()">⬆ Restore</button>
+      <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importData(event)">
+      <button class="reset-btn" onclick="resetAll()">Reset All</button>
+    </div>
   </div>
   <div class="prog-wrap"><div class="prog-fill" id="pFill" style="width:0%"></div></div>
   <div class="prog-label"><span id="pText">0 tracked</span><span id="pPct">0%</span></div>
@@ -308,6 +313,49 @@ function save(){
   localStorage.setItem('dp5_names',  JSON.stringify(locNames));
   localStorage.setItem('dp5_custom', JSON.stringify(customs));
   localStorage.setItem('dp5_open',   JSON.stringify([...openSet]));
+}
+
+// ─── Backup / Restore ─────────────────────────────────────────────────────────
+function exportData(){
+  const backup = {
+    chips, subData, locNames, customs,
+    openSet: [...openSet],
+    exportedAt: new Date().toISOString()
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `pikmin-tracker-backup-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function importData(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const data = JSON.parse(reader.result);
+      if(!confirm('This will replace your current progress with the backup file. Continue?')) return;
+      chips    = data.chips    || {};
+      subData  = data.subData  || {};
+      locNames = data.locNames || {};
+      customs  = data.customs  || [];
+      openSet  = new Set(data.openSet || []);
+      save();
+      renderAll();
+      alert('Backup restored successfully!');
+    }catch(e){
+      alert('This file could not be read. Please make sure you selected a valid backup file.');
+    }
+    ev.target.value = '';
+  };
+  reader.readAsText(file);
 }
 
 // ─── Resolvers ────────────────────────────────────────────────────────────────
