@@ -126,6 +126,12 @@
   .seg-pick input:checked + span{color:var(--green);}
   .seg-pick label:has(input:checked){background:var(--green-dim);color:var(--green);}
 
+  /* Pikmin type selector chips */
+  .type-grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
+  .type-chip{display:flex;align-items:center;gap:5px;background:var(--surface2);border:1.5px solid var(--border);border-radius:16px;padding:5px 10px;font-size:11px;font-weight:700;color:var(--text-dim);cursor:pointer;user-select:none;transition:all .15s;}
+  .type-chip input{accent-color:var(--green);margin:0;}
+  .type-chip:has(input:checked){border-color:var(--green);color:var(--green);background:#0e2615;}
+
   /* Add section */
   .add-section{margin:0 10px 16px;background:var(--surface);border:1px dashed var(--border);border-radius:10px;overflow:hidden;}
   .add-toggle{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none;font-weight:700;font-size:13px;color:var(--text-dim);}
@@ -189,6 +195,16 @@ const PIK={red:'Red',yellow:'Yellow',blue:'Blue',purple:'Purple',white:'White',r
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function mkSub(key,label,{ice=false,hasRare=false,rareIce=false}={}){return{key,label,ice,hasRare,rareIce};}
+
+function renderTypeGrid(idPrefix,selected){
+  let h=`<div class="type-grid">`;
+  for(const t of MOST){
+    const checked=selected.includes(t)?'checked':'';
+    h+=`<label class="type-chip"><input type="checkbox" id="${idPrefix}_${t}" ${checked}>${PIK[t]}</label>`;
+  }
+  h+='</div>';
+  return h;
+}
 
 // ─── Built-in base types per location ─────────────────────────────────────────
 const BASE_TYPES={
@@ -303,6 +319,7 @@ let subData  = JSON.parse(localStorage.getItem('dp5_subs')   ||'{}');
 let locNames = JSON.parse(localStorage.getItem('dp5_names')  ||'{}');
 let customs  = JSON.parse(localStorage.getItem('dp5_custom') ||'[]');
 let openSet  = new Set(JSON.parse(localStorage.getItem('dp5_open') ||'[]'));
+let customBaseTypes = JSON.parse(localStorage.getItem('dp5_basetypes') ||'{}');
 let filter   = 'all';
 let addOpen  = false;
 let editId   = null;
@@ -313,12 +330,13 @@ function save(){
   localStorage.setItem('dp5_names',  JSON.stringify(locNames));
   localStorage.setItem('dp5_custom', JSON.stringify(customs));
   localStorage.setItem('dp5_open',   JSON.stringify([...openSet]));
+  localStorage.setItem('dp5_basetypes', JSON.stringify(customBaseTypes));
 }
 
 // ─── Backup / Restore ─────────────────────────────────────────────────────────
 function exportData(){
   const backup = {
-    chips, subData, locNames, customs,
+    chips, subData, locNames, customs, customBaseTypes,
     openSet: [...openSet],
     exportedAt: new Date().toISOString()
   };
@@ -346,6 +364,7 @@ function importData(ev){
       subData  = data.subData  || {};
       locNames = data.locNames || {};
       customs  = data.customs  || [];
+      customBaseTypes = data.customBaseTypes || {};
       openSet  = new Set(data.openSet || []);
       save();
       renderAll();
@@ -360,7 +379,7 @@ function importData(ev){
 
 // ─── Resolvers ────────────────────────────────────────────────────────────────
 function getSubs(id){ return subData[id]?subData[id]:(DEFAULT_SUBS[id]?JSON.parse(JSON.stringify(DEFAULT_SUBS[id])):[mkSub('main','Main')]); }
-function getBase(id){ return BASE_TYPES[id]||MOST; }
+function getBase(id){ return customBaseTypes[id]||BASE_TYPES[id]||MOST; }
 function getName(loc){ return(locNames[loc.id]&&locNames[loc.id].name)||loc.name; }
 function getIcon(loc){ return(locNames[loc.id]&&locNames[loc.id].icon)||loc.icon; }
 
@@ -504,6 +523,16 @@ function renderCard(loc){
   const done=cardAllDone(loc);
   const subLabels=subs.map(s=>s.label).join(' · ');
 
+  let moveBtns='';
+  if(loc.custom&&getSort()==='game'){
+    const section=loc.section||'monthly';
+    const sectionIds=customs.filter(c=>(c.section||'monthly')===section).map(c=>c.id);
+    const pos=sectionIds.indexOf(loc.id);
+    const isFirst=pos<=0, isLast=pos>=sectionIds.length-1;
+    moveBtns=`<button class="ibtn" ${isFirst?'disabled style="opacity:.25"':''} onclick="moveCustom('${loc.id}',-1,event)">▲</button>`+
+              `<button class="ibtn" ${isLast?'disabled style="opacity:.25"':''} onclick="moveCustom('${loc.id}',1,event)">▼</button>`;
+  }
+
   let h=`<div class="card${done?' all-done':''}${isOpen?' open':''}" id="card_${loc.id}">`;
   h+=`<div class="card-hdr" onclick="toggleCard('${loc.id}')">`;
   h+=`<div class="card-left"><span class="loc-icon">${getIcon(loc)}</span>`;
@@ -511,6 +540,7 @@ function renderCard(loc){
   h+=`<div class="card-right">`;
   h+=`<span class="badge${nd===nt?' full':''}">${nd}/${nt}</span>`;
   if(rt>0) h+=`<span class="badge rare">⭐${rd}/${rt}</span>`;
+  h+=moveBtns;
   h+=`<button class="ibtn" onclick="openEdit('${loc.id}',event)">✏️</button>`;
   if(loc.custom) h+=`<button class="ibtn del" onclick="delCustom('${loc.id}',event)">✕</button>`;
   h+=`<span class="chevron">▼</span></div></div>`;
@@ -561,6 +591,8 @@ function renderModal(){
     <h2>✏️ ${getName(loc)}</h2>
     <div class="modal-section">Card Info</div>
     <div class="mrow"><input type="text" id="editName" value="${nm.name||''}" placeholder="${loc.name} (override name)"></div>
+    <div class="modal-section">Pikmin Types Available</div>
+    ${renderTypeGrid('editType',getBase(loc.id))}
     <div class="modal-section">Sub-collections
       <span style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim);margin-left:6px;">
         🩵 Ice &nbsp;⭐ Has Rare &nbsp;🩵⭐ Ice in Rare
@@ -611,6 +643,8 @@ function saveEdit(){
   if(!loc) return;
   const nameVal=document.getElementById('editName').value.trim();
   locNames[loc.id]={name:nameVal||undefined};
+  const chosenTypes=MOST.filter(t=>document.getElementById(`editType_${t}`)?.checked);
+  customBaseTypes[loc.id]=chosenTypes.length?chosenTypes:MOST;
   const list=document.getElementById('subEditorList');
   const newSubs=[];
   for(const row of list.children){
@@ -639,9 +673,10 @@ function addCustom(){
   if(!name){ document.getElementById('newName')?.focus(); return; }
   const id='cust_'+Date.now();
   const createdAt=Date.now();
+  const chosenTypes=MOST.filter(t=>document.getElementById(`newType_${t}`)?.checked);
   customs.push({id,icon:'📅',name,section,custom:true,createdAt});
   subData[id]=[mkSub('main',sub)];
-  BASE_TYPES[id]=MOST;
+  customBaseTypes[id]=chosenTypes.length?chosenTypes:MOST;
   openSet.add(id);
   addOpen=false;
   save();renderAll();
@@ -652,8 +687,24 @@ function delCustom(id,ev){
   if(!confirm('Remove this category?')) return;
   customs=customs.filter(c=>c.id!==id);
   openSet.delete(id);
-  delete subData[id]; delete locNames[id];
+  delete subData[id]; delete locNames[id]; delete customBaseTypes[id];
   Object.keys(chips).forEach(k=>{if(k.startsWith(id+'__'))delete chips[k];});
+  save();renderAll();
+}
+
+function moveCustom(id,dir,ev){
+  ev.stopPropagation();
+  const item=customs.find(c=>c.id===id);
+  if(!item) return;
+  const section=item.section||'monthly';
+  const sectionIds=customs.filter(c=>(c.section||'monthly')===section).map(c=>c.id);
+  const pos=sectionIds.indexOf(id);
+  const newPos=pos+dir;
+  if(newPos<0||newPos>=sectionIds.length) return;
+  const otherId=sectionIds[newPos];
+  const i1=customs.findIndex(c=>c.id===id);
+  const i2=customs.findIndex(c=>c.id===otherId);
+  [customs[i1],customs[i2]]=[customs[i2],customs[i1]];
   save();renderAll();
 }
 
@@ -731,7 +782,7 @@ function renderAll(){
 
   // Monthly
   const visMonthly=sortedLocs(custMonthly).filter(cardMatchesFilter);
-  let monthHtml=`<div class="sec-label">Monthly Collections</div>`;
+  let monthHtml=`<div class="sec-label">Monthly Collections${getSort()==='game'?' <span style="text-transform:none;letter-spacing:0;font-weight:400;">— use ▲▼ to reorder</span>':''}</div>`;
   for(const loc of visMonthly) monthHtml+=renderCard(loc);
   monthHtml+=`<div class="add-section">
     <div class="add-toggle" onclick="toggleAdd()"><span style="font-size:18px;color:var(--green)">＋</span> Add Collection</div>
@@ -746,7 +797,9 @@ function renderAll(){
         <label><input type="radio" name="newSection" value="special"><span>Special</span></label>
         <label><input type="radio" name="newSection" value="monthly" checked><span>Monthly</span></label>
       </div>
-      <p style="font-size:11px;color:var(--text-dim);margin-top:10px;">Use ✏️ after adding to configure Ice &amp; Rare per sub-collection.</p>
+      <label class="field-label">Pikmin types available</label>
+      ${renderTypeGrid('newType',MOST)}
+      <p style="font-size:11px;color:var(--text-dim);margin-top:10px;">Uncheck any types this collection doesn't use. Use ✏️ after adding to configure Ice &amp; Rare per sub-collection, or to change types later.</p>
       <button class="add-submit" onclick="addCustom()">Add</button>
     </div>
   </div>`;
